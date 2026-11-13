@@ -1,0 +1,2037 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>BoogaBooga - 오픈월드 생존 타워 디펜스</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Jua&family=Noto+Sans+KR:wght@400;600;700;900&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #141c14;
+      font-family: 'Noto Sans KR', sans-serif;
+    }
+    .font-game {
+      font-family: 'Jua', sans-serif;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.3);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.25);
+      border-radius: 3px;
+    }
+    .glass-panel {
+      background: rgba(18, 24, 20, 0.85);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    }
+    .btn-game {
+      transition: all 0.12s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    .btn-game:hover:not(:disabled) {
+      transform: translateY(-2px);
+      filter: brightness(1.12);
+    }
+    .btn-game:active:not(:disabled) {
+      transform: translateY(1px) scale(0.97);
+    }
+    .btn-selected {
+      border-color: #facc15 !important;
+      box-shadow: 0 0 14px rgba(250, 204, 21, 0.55);
+      background: rgba(250, 204, 21, 0.18) !important;
+    }
+    @keyframes pulseWarning {
+      0%, 100% { opacity: 0.9; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(1.03); }
+    }
+    .animate-warning {
+      animation: pulseWarning 1.5s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="text-white">
+
+  <!-- 메인 게임 캔버스 -->
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- 상단 HUD: 날짜/시간, 자원, 본진 & 플레이어 체력 -->
+  <div id="hudTop" class="fixed top-0 left-0 right-0 p-2 sm:p-3 pointer-events-none flex flex-wrap items-start justify-between gap-2 z-10">
+    
+    <!-- 좌측: 게임 로고, 일차 및 낮/밤 타이머 + 본진/플레이어 체력 -->
+    <div class="flex flex-col gap-2 pointer-events-auto">
+      <div class="glass-panel rounded-2xl px-3.5 py-2 flex items-center gap-3">
+        <span class="font-game text-base sm:text-lg text-amber-400 tracking-wide hidden md:inline">BoogaBooga</span>
+        <div id="phaseBadge" class="px-3 py-1 rounded-xl font-game text-base sm:text-lg bg-amber-500/20 border border-amber-400/50 text-amber-300 flex items-center gap-1.5">
+          <span id="phaseIcon">☀️</span>
+          <span id="dayText">DAY 1</span>
+        </div>
+        <div class="flex flex-col min-w-[110px] sm:min-w-[140px]">
+          <div class="flex justify-between text-xs font-bold text-gray-300 mb-1">
+            <span id="phaseLabel">낮 (파밍/건설)</span>
+            <span id="timerText">45s</span>
+          </div>
+          <div class="w-full h-2.5 bg-gray-800 rounded-full overflow-hidden border border-white/10">
+            <div id="timeBar" class="h-full bg-gradient-to-r from-amber-400 to-yellow-300 transition-all duration-200" style="width: 100%;"></div>
+          </div>
+        </div>
+        <button id="skipDayBtn" title="밤 웨이브 즉시 시작" class="btn-game hidden sm:flex items-center gap-1 bg-rose-600/80 hover:bg-rose-500 text-white text-xs font-bold px-2.5 py-1.5 rounded-xl border border-rose-400/40">
+          ⚔️ 밤 시작
+        </button>
+      </div>
+
+      <!-- 본진 및 플레이어 체력바 -->
+      <div class="glass-panel rounded-2xl px-3.5 py-2 flex flex-col gap-1.5">
+        <!-- 본진 체력 -->
+        <div class="flex items-center gap-2">
+          <span class="text-sm w-16 font-bold text-emerald-300 truncate" id="coreTierLabel">🏠 본진 T1</span>
+          <div class="flex-1 h-3 bg-gray-900 rounded-full overflow-hidden border border-white/15 relative">
+            <div id="coreHpBar" class="h-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-150" style="width: 100%;"></div>
+            <span id="coreHpText" class="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow">500 / 500</span>
+          </div>
+        </div>
+        <!-- 플레이어 체력 -->
+        <div class="flex items-center gap-2">
+          <span class="text-sm w-16 font-bold text-sky-300">🧑 나</span>
+          <div class="flex-1 h-3 bg-gray-900 rounded-full overflow-hidden border border-white/15 relative">
+            <div id="playerHpBar" class="h-full bg-gradient-to-r from-sky-500 to-cyan-400 transition-all duration-150" style="width: 100%;"></div>
+            <span id="playerHpText" class="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow">150 / 150</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 중앙: 4대 자원 현황 바 (돌, 철, 금, 크리스탈) -->
+    <div class="glass-panel rounded-2xl px-3 sm:px-4 py-2 flex items-center gap-3 sm:gap-5 pointer-events-auto mx-auto sm:mx-0">
+      <div class="flex items-center gap-1.5" title="돌 (Stone)">
+        <span class="text-lg">🪨</span>
+        <span id="resStone" class="font-game text-base sm:text-lg text-slate-200">50</span>
+      </div>
+      <div class="flex items-center gap-1.5" title="철 (Iron)">
+        <span class="text-lg">⛓️</span>
+        <span id="resIron" class="font-game text-base sm:text-lg text-cyan-200">30</span>
+      </div>
+      <div class="flex items-center gap-1.5" title="금 (Gold)">
+        <span class="text-lg">🪙</span>
+        <span id="resGold" class="font-game text-base sm:text-lg text-yellow-300">0</span>
+      </div>
+      <div class="flex items-center gap-1.5" title="크리스탈 (Crystal)">
+        <span class="text-lg">💎</span>
+        <span id="resCrystal" class="font-game text-base sm:text-lg text-fuchsia-300">0</span>
+      </div>
+    </div>
+
+    <!-- 우측: 미니맵 + 유틸리티 버튼 -->
+    <div class="flex flex-col items-end gap-2 pointer-events-auto">
+      <div class="flex items-center gap-1.5">
+        <button id="bossRadarBtn" class="btn-game glass-panel px-2.5 py-1.5 rounded-xl text-xs font-bold text-purple-300 hover:text-white flex items-center gap-1" title="BoogaBooga 가디언 보스 제단 위치 안내">
+          🗿 보스 제단
+        </button>
+        <button id="soundToggleBtn" class="btn-game glass-panel p-2 rounded-xl text-sm" title="효과음 켜기/끄기">
+          🔊
+        </button>
+        <button id="helpToggleBtn" class="btn-game glass-panel px-2.5 py-1.5 rounded-xl text-xs font-bold text-amber-300" title="BoogaBooga 게임 가이드">
+          ❓ 가이드
+        </button>
+      </div>
+      <!-- 미니맵 캔버스 -->
+      <div class="glass-panel p-1.5 rounded-2xl relative hidden sm:block">
+        <canvas id="minimapCanvas" width="144" height="144" class="rounded-xl bg-[#101812] border border-white/10"></canvas>
+        <span class="absolute bottom-2.5 left-3 text-[10px] text-white/60 font-bold pointer-events-none">BOOGABOOGA MAP</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 밤 웨이브 경고 배너 -->
+  <div id="waveBanner" class="fixed top-24 left-1/2 -translate-x-1/2 pointer-events-none z-20 hidden">
+    <div class="glass-panel border-rose-500/60 bg-rose-950/80 px-6 py-2.5 rounded-2xl text-center animate-warning">
+      <div id="waveBannerTitle" class="font-game text-xl sm:text-2xl text-rose-300">⚠️ NIGHT WAVE 1 시작!</div>
+      <div id="waveBannerSub" class="text-xs text-rose-100/80">사방에서 몬스터들이 본진을 향해 몰려옵니다!</div>
+    </div>
+  </div>
+
+  <!-- 버프/스탯 요약 좌측 하단 -->
+  <div id="statsPanel" class="fixed bottom-24 left-3 glass-panel rounded-2xl p-2.5 text-xs pointer-events-auto hidden md:flex flex-col gap-1 z-10 min-w-[165px]">
+    <div class="font-bold text-amber-300 border-b border-white/10 pb-1 mb-0.5 flex justify-between">
+      <span>⚔️ 내 전투 스탯</span>
+      <span id="weaponTierBadge" class="text-cyan-300">Lv.1</span>
+    </div>
+    <div class="flex justify-between text-gray-300"><span>공격력:</span><span id="statAtk" class="font-bold text-white">26</span></div>
+    <div class="flex justify-between text-gray-300"><span>채집량:</span><span id="statGather" class="font-bold text-emerald-300">x1.00</span></div>
+    <div class="flex justify-between text-gray-300"><span>이동속도:</span><span id="statSpeed" class="font-bold text-sky-300">240</span></div>
+    <div class="flex justify-between text-gray-300"><span>처치 수:</span><span id="statKills" class="font-bold text-rose-300">0</span></div>
+  </div>
+
+  <!-- 건물 선택/업그레이드/수리 팝업 (우측 중단) -->
+  <div id="inspectPanel" class="fixed right-3 top-1/2 -translate-y-1/2 glass-panel rounded-2xl p-3.5 w-64 pointer-events-auto hidden z-20 border-amber-400/40">
+    <div class="flex justify-between items-center border-b border-white/15 pb-2 mb-2.5">
+      <div>
+        <h3 id="inspectTitle" class="font-game text-lg text-amber-300">석재 방어벽</h3>
+        <span id="inspectTier" class="text-xs text-gray-300">Tier 1 / Max 3</span>
+      </div>
+      <button id="closeInspectBtn" class="text-gray-400 hover:text-white text-lg px-1.5">✕</button>
+    </div>
+    <div class="space-y-1.5 text-xs mb-3">
+      <div class="flex justify-between">
+        <span class="text-gray-400">내구도:</span>
+        <span id="inspectHp" class="font-bold text-emerald-300">220 / 220</span>
+      </div>
+      <div id="inspectExtraStats" class="space-y-1 text-gray-300"></div>
+    </div>
+    <div class="flex flex-col gap-2">
+      <button id="repairBuildingBtn" class="btn-game w-full py-2 px-3 rounded-xl bg-emerald-600/80 hover:bg-emerald-500 text-xs font-bold flex items-center justify-between">
+        <span>🔧 수리하기</span>
+        <span id="repairCostText" class="text-emerald-100">🪨 5</span>
+      </button>
+      <button id="upgradeBuildingBtn" class="btn-game w-full py-2 px-3 rounded-xl bg-amber-500/85 hover:bg-amber-400 text-gray-950 text-xs font-extrabold flex items-center justify-between">
+        <span>⬆️ 강화하기</span>
+        <span id="upgradeCostText">⛓️ 20</span>
+      </button>
+      <button id="sellBuildingBtn" class="btn-game w-full py-1.5 px-3 rounded-xl bg-rose-900/60 hover:bg-rose-700/80 text-rose-200 text-xs font-semibold">
+        🗑️ 철거 (자원 50% 반환)
+      </button>
+    </div>
+  </div>
+
+  <!-- 하단 건설 & 무기 강화 툴바 -->
+  <div id="hudBottom" class="fixed bottom-2 sm:bottom-3 left-1/2 -translate-x-1/2 w-[96%] max-w-4xl pointer-events-auto z-10">
+    <div class="glass-panel rounded-2xl p-2 flex items-center justify-between gap-1.5 overflow-x-auto">
+      
+      <!-- 건축/포탑 슬롯 1~4 -->
+      <div class="flex items-center gap-1.5 sm:gap-2">
+        <!-- 1: 방어벽 -->
+        <button data-build="wall" class="build-btn btn-game relative flex flex-col items-center justify-center min-w-[68px] sm:min-w-[82px] py-1.5 px-2 rounded-xl bg-white/5 border border-white/15 hover:bg-white/10">
+          <span class="absolute top-1 left-1.5 text-[10px] font-bold text-gray-400">1</span>
+          <span class="text-xl sm:text-2xl">🧱</span>
+          <span class="text-[11px] font-bold mt-0.5">방어벽</span>
+          <span class="text-[10px] text-slate-200">🪨10</span>
+        </button>
+
+        <!-- 2: 기관총 포탑 -->
+        <button data-build="mg" class="build-btn btn-game relative flex flex-col items-center justify-center min-w-[68px] sm:min-w-[82px] py-1.5 px-2 rounded-xl bg-white/5 border border-white/15 hover:bg-white/10">
+          <span class="absolute top-1 left-1.5 text-[10px] font-bold text-gray-400">2</span>
+          <span class="text-xl sm:text-2xl">🔫</span>
+          <span class="text-[11px] font-bold mt-0.5">기관총 포탑</span>
+          <span class="text-[10px] text-cyan-200">🪨20 ⛓️15</span>
+        </button>
+
+        <!-- 3: 박격포 포탑 -->
+        <button data-build="cannon" class="build-btn btn-game relative flex flex-col items-center justify-center min-w-[68px] sm:min-w-[82px] py-1.5 px-2 rounded-xl bg-white/5 border border-white/15 hover:bg-white/10">
+          <span class="absolute top-1 left-1.5 text-[10px] font-bold text-gray-400">3</span>
+          <span class="text-xl sm:text-2xl">💣</span>
+          <span class="text-[11px] font-bold mt-0.5">박격포 포탑</span>
+          <span class="text-[10px] text-yellow-200">⛓️30 🪙10</span>
+        </button>
+
+        <!-- 4: 빙결 포탑 -->
+        <button data-build="frost" class="build-btn btn-game relative flex flex-col items-center justify-center min-w-[68px] sm:min-w-[82px] py-1.5 px-2 rounded-xl bg-white/5 border border-white/15 hover:bg-white/10">
+          <span class="absolute top-1 left-1.5 text-[10px] font-bold text-gray-400">4</span>
+          <span class="text-xl sm:text-2xl">❄️</span>
+          <span class="text-[11px] font-bold mt-0.5">빙결 포탑</span>
+          <span class="text-[10px] text-fuchsia-200">⛓️25 💎5</span>
+        </button>
+      </div>
+
+      <div class="h-10 w-[1px] bg-white/15 mx-0.5 shrink-0"></div>
+
+      <!-- 본진 강화 & 무기 강화 버튼 -->
+      <div class="flex items-center gap-1.5 sm:gap-2">
+        <!-- 5: 본진(집) 선택/강화 -->
+        <button id="selectCoreBtn" class="btn-game relative flex flex-col items-center justify-center min-w-[74px] sm:min-w-[90px] py-1.5 px-2 rounded-xl bg-emerald-900/40 border border-emerald-400/30 hover:bg-emerald-800/50">
+          <span class="absolute top-1 left-1.5 text-[10px] font-bold text-emerald-300">5</span>
+          <span class="text-xl sm:text-2xl">🏰</span>
+          <span class="text-[11px] font-bold text-emerald-200 mt-0.5">본진 강화</span>
+          <span id="coreNextCost" class="text-[10px] text-emerald-100">🪨50 ⛓️40</span>
+        </button>
+
+        <!-- 6: 무기/장비 업그레이드 -->
+        <button id="upgradeWeaponBtn" class="btn-game relative flex flex-col items-center justify-center min-w-[74px] sm:min-w-[90px] py-1.5 px-2 rounded-xl bg-sky-900/40 border border-sky-400/30 hover:bg-sky-800/50">
+          <span class="absolute top-1 left-1.5 text-[10px] font-bold text-sky-300">6</span>
+          <span class="text-xl sm:text-2xl">⚔️</span>
+          <span class="text-[11px] font-bold text-sky-200 mt-0.5">무기 강화</span>
+          <span id="weaponNextCost" class="text-[10px] text-sky-100">🪨25 ⛓️15</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 시작 / 가이드 모달 -->
+  <div id="startModal" class="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+    <div class="glass-panel rounded-3xl max-w-lg w-full p-6 sm:p-8 text-center border-amber-400/30">
+      <div class="inline-block px-3 py-1 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-xs font-bold mb-2">
+        BOOGABOOGA • OPEN-WORLD SURVIVAL & TOWER DEFENSE
+      </div>
+      <h1 class="font-game text-3xl sm:text-4xl text-amber-400 mb-2 tracking-wide">
+        BoogaBooga
+      </h1>
+      <p class="text-sm text-gray-300 mb-5 leading-relaxed">
+        낮에는 <span class="text-amber-300 font-bold">BoogaBooga</span>의 오픈월드를 탐험하며 <strong>돌, 철, 금, 크리스탈</strong>을 채굴하고 보물상자와 <span class="text-purple-300 font-bold">가디언 보스</span>를 공략하세요!<br/>
+        밤이 되면 사방에서 몰려오는 몬스터 무리로부터 <span class="text-emerald-300 font-bold">집(본진)과 자동 포탑</span>을 업그레이드해 살아남으세요!
+      </p>
+
+      <div class="bg-black/40 rounded-2xl p-4 text-left text-xs sm:text-sm space-y-2 mb-6 border border-white/10">
+        <div class="flex items-center gap-2"><span class="text-amber-400 font-bold w-24">이동 / 조준:</span><span>WASD 또는 방향키 이동 / 마우스 커서 조준</span></div>
+        <div class="flex items-center gap-2"><span class="text-amber-400 font-bold w-24">채굴 / 공격:</span><span>마우스 좌클릭 (꾹 누르면 연속 채굴/사격)</span></div>
+        <div class="flex items-center gap-2"><span class="text-amber-400 font-bold w-24">건설 / 강화:</span><span>하단 메뉴 클릭 또는 단축키 1~6 (우클릭/ESC 취소)</span></div>
+        <div class="flex items-center gap-2"><span class="text-amber-400 font-bold w-24">보스 레이드:</span><span>맵 곳곳의 보라색 제단에서 거대 골렘 보스 소환 및 처치</span></div>
+      </div>
+
+      <button id="startGameBtn" class="btn-game w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-400 text-gray-950 font-game text-xl shadow-lg shadow-amber-500/30">
+        🔥 BoogaBooga 시작하기
+      </button>
+    </div>
+  </div>
+
+  <!-- 게임 오버 결과 모달 -->
+  <div id="gameOverModal" class="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 hidden">
+    <div class="glass-panel rounded-3xl max-w-md w-full p-7 text-center border-rose-500/40">
+      <div class="text-5xl mb-3">💥</div>
+      <h2 class="font-game text-3xl text-rose-400 mb-2">본진이 파괴되었습니다!</h2>
+      <p class="text-sm text-gray-300 mb-5">BoogaBooga 세계에서 당신의 요새는 용감하게 싸웠습니다.</p>
+      
+      <div class="bg-black/40 rounded-2xl p-4 space-y-2 text-sm mb-6 border border-white/10">
+        <div class="flex justify-between"><span class="text-gray-400">생존 일수:</span><span id="finalDays" class="font-bold text-amber-300">1 일</span></div>
+        <div class="flex justify-between"><span class="text-gray-400">처치한 몬스터:</span><span id="finalKills" class="font-bold text-rose-300">0 마리</span></div>
+        <div class="flex justify-between"><span class="text-gray-400">처치한 보스:</span><span id="finalBosses" class="font-bold text-purple-300">0 마리</span></div>
+        <div class="flex justify-between"><span class="text-gray-400">본진 최종 등급:</span><span id="finalCoreTier" class="font-bold text-emerald-300">Tier 1</span></div>
+      </div>
+
+      <button id="restartBtn" class="btn-game w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-400 text-gray-950 font-game text-xl">
+        🔄 BoogaBooga 다시 도전하기
+      </button>
+    </div>
+  </div>
+
+  <!-- 토스트 메시지 알림 영역 -->
+  <div id="toastContainer" class="fixed top-20 right-4 flex flex-col items-end gap-1.5 pointer-events-none z-40"></div>
+
+  <script>
+    /**
+     * BoogaBooga
+     * 2.5D 오픈월드 생존 + 기지 건설 + 타워 디펜스 + 보스 레이드 게임
+     * 4대 자원: 돌(Stone), 철(Iron), 금(Gold), 크리스탈(Crystal)
+     */
+
+    // ==========================================
+    // 1. Web Audio API 효과음 합성기
+    // ==========================================
+    class SoundSystem {
+      constructor() {
+        this.ctx = null;
+        this.muted = false;
+      }
+
+      init() {
+        if (!this.ctx) {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioCtx();
+        }
+        if (this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+
+      playTone(freq, type, duration, vol = 0.12, slideFreq = null) {
+        if (this.muted || !this.ctx) return;
+        try {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+          if (slideFreq) {
+            osc.frequency.exponentialRampToValueAtTime(slideFreq, this.ctx.currentTime + duration);
+          }
+          gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + duration);
+        } catch (e) {}
+      }
+
+      playMine() { this.playTone(520, 'square', 0.09, 0.1, 280); }
+      playCrystalMine() { this.playTone(880, 'sine', 0.12, 0.12, 1240); }
+      playShoot() { this.playTone(340, 'sawtooth', 0.08, 0.08, 120); }
+      playCannon() { this.playTone(110, 'sawtooth', 0.25, 0.18, 35); }
+      playFrost() { this.playTone(780, 'sine', 0.14, 0.08, 420); }
+      playBuild() { this.playTone(260, 'sine', 0.14, 0.15, 440); }
+      playUpgrade() {
+        this.playTone(330, 'triangle', 0.12, 0.15, 440);
+        setTimeout(() => this.playTone(550, 'triangle', 0.18, 0.16, 720), 90);
+      }
+      playChest() {
+        this.playTone(440, 'sine', 0.12, 0.16, 660);
+        setTimeout(() => this.playTone(660, 'sine', 0.2, 0.16, 880), 100);
+      }
+      playWaveAlarm() {
+        this.playTone(180, 'sawtooth', 0.35, 0.18, 140);
+        setTimeout(() => this.playTone(150, 'sawtooth', 0.45, 0.2, 100), 320);
+      }
+      playHit() { this.playTone(130, 'square', 0.07, 0.1, 60); }
+    }
+
+    const sfx = new SoundSystem();
+
+    // ==========================================
+    // 2. 게임 상수 및 밸런스 데이터
+    // ==========================================
+    const WORLD_SIZE = 3200;
+    const HALF_WORLD = WORLD_SIZE / 2;
+    const GRID_SIZE = 48;
+
+    const DAY_DURATION = 48;   // 낮 48초
+    const NIGHT_DURATION = 35; // 밤 35초
+
+    // 본진 티어 데이터
+    const CORE_TIERS = [
+      null,
+      { name: '석조 요새 (T1)', maxHp: 500, armor: 0, color: '#64748b', roofColor: '#475569', upgradeCost: { stone: 50, iron: 40, gold: 0, crystal: 0 } },
+      { name: '강철 성채 (T2)', maxHp: 1200, armor: 5, color: '#0284c7', roofColor: '#1e3a8a', upgradeCost: { stone: 80, iron: 100, gold: 35, crystal: 10 } },
+      { name: '크리스탈 궁전 (T3)', maxHp: 2800, armor: 12, color: '#9333ea', roofColor: '#581c87', upgradeCost: null }
+    ];
+
+    // 무기 업그레이드 데이터
+    const WEAPON_TIERS = [
+      null,
+      { name: '조약돌 & 철제 새총', dmg: 26, fireRate: 0.36, speed: 620, color: '#cbd5e1', cost: { stone: 25, iron: 15, gold: 0, crystal: 0 } },
+      { name: '강화된 강철 블래스터', dmg: 45, fireRate: 0.30, speed: 700, color: '#38bdf8', cost: { stone: 40, iron: 45, gold: 15, crystal: 0 } },
+      { name: '황금 에너지 캐논', dmg: 78, fireRate: 0.24, speed: 780, color: '#facc15', cost: { stone: 60, iron: 60, gold: 40, crystal: 15 } },
+      { name: '초월 크리스탈 파괴광선', dmg: 130, fireRate: 0.19, speed: 880, color: '#e879f9', cost: null }
+    ];
+
+    // 건축물 설계도 (돌, 철, 금, 크리스탈 자원 체계)
+    const BUILDING_DEFS = {
+      wall: {
+        name: '방어벽',
+        cost: { stone: 10, iron: 0, gold: 0, crystal: 0 },
+        tiers: [
+          null,
+          { label: '돌 방어벽', maxHp: 220, color: '#475569', border: '#94a3b8', nextCost: { stone: 15, iron: 20, gold: 0, crystal: 0 } },
+          { label: '철제 방어벽', maxHp: 550, color: '#0369a1', border: '#38bdf8', nextCost: { stone: 0, iron: 35, gold: 15, crystal: 5 } },
+          { label: '크리스탈 장갑벽', maxHp: 1300, color: '#7e22ce', border: '#e879f9', nextCost: null }
+        ]
+      },
+      mg: {
+        name: '기관총 포탑',
+        cost: { stone: 20, iron: 15, gold: 0, crystal: 0 },
+        tiers: [
+          null,
+          { label: '기관총 포탑 Lv.1', maxHp: 180, dmg: 16, range: 260, fireRate: 0.32, color: '#ca8a04', nextCost: { stone: 25, iron: 30, gold: 10, crystal: 0 } },
+          { label: '기관총 포탑 Lv.2', maxHp: 340, dmg: 28, range: 310, fireRate: 0.22, color: '#0284c7', nextCost: { stone: 30, iron: 40, gold: 25, crystal: 10 } },
+          { label: '개틀링 포탑 Lv.3', maxHp: 600, dmg: 46, range: 360, fireRate: 0.14, color: '#e11d48', nextCost: null }
+        ]
+      },
+      cannon: {
+        name: '박격포 포탑',
+        cost: { stone: 0, iron: 30, gold: 10, crystal: 0 },
+        tiers: [
+          null,
+          { label: '박격포 포탑 Lv.1', maxHp: 200, dmg: 55, splash: 85, range: 320, fireRate: 1.45, color: '#ea580c', nextCost: { stone: 20, iron: 45, gold: 20, crystal: 5 } },
+          { label: '중박격포 포탑 Lv.2', maxHp: 380, dmg: 95, splash: 110, range: 370, fireRate: 1.2, color: '#dc2626', nextCost: { stone: 0, iron: 60, gold: 40, crystal: 15 } },
+          { label: '크리스탈 포탑 Lv.3', maxHp: 680, dmg: 165, splash: 140, range: 430, fireRate: 0.95, color: '#9333ea', nextCost: null }
+        ]
+      },
+      frost: {
+        name: '빙결 포탑',
+        cost: { stone: 0, iron: 25, gold: 0, crystal: 5 },
+        tiers: [
+          null,
+          { label: '빙결 포탑 Lv.1', maxHp: 180, dmg: 10, slow: 0.45, range: 240, fireRate: 0.65, color: '#06b6d4', nextCost: { stone: 15, iron: 30, gold: 12, crystal: 10 } },
+          { label: '혹한 포탑 Lv.2', maxHp: 340, dmg: 20, slow: 0.60, range: 290, fireRate: 0.50, color: '#3b82f6', nextCost: { stone: 0, iron: 40, gold: 25, crystal: 20 } },
+          { label: '절대영도 타워 Lv.3', maxHp: 580, dmg: 35, slow: 0.72, range: 340, fireRate: 0.38, color: '#818cf8', nextCost: null }
+        ]
+      }
+    };
+
+    // ==========================================
+    // 3. 게임 상태 객체 (Game State)
+    // ==========================================
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const minimapCanvas = document.getElementById('minimapCanvas');
+    const miniCtx = minimapCanvas.getContext('2d');
+
+    let gameRunning = false;
+    let lastTime = 0;
+
+    const state = {
+      day: 1,
+      isNight: false,
+      phaseTimer: DAY_DURATION,
+      maxPhaseTime: DAY_DURATION,
+      resources: { stone: 50, iron: 30, gold: 0, crystal: 0 },
+      kills: 0,
+      bossKills: 0,
+      
+      // 플레이어 상태
+      player: {
+        x: 0,
+        y: 110,
+        radius: 18,
+        hp: 150,
+        maxHp: 150,
+        speed: 240,
+        gatherMult: 1.0,
+        bonusAtk: 0,
+        weaponTier: 1,
+        attackCooldown: 0,
+        angle: 0,
+        swingAnim: 0
+      },
+
+      // 핵심 본진 (House / Core)
+      core: {
+        x: 0,
+        y: 0,
+        radius: 44,
+        tier: 1,
+        hp: 500,
+        maxHp: 500
+      },
+
+      // 건설 및 UI 모드
+      buildMode: null,
+      selectedBuilding: null,
+      hoverGrid: { x: 0, y: 0, valid: false },
+
+      // 엔티티 배열
+      nodes: [],       // 돌, 철, 금, 크리스탈 자원 노드
+      chests: [],      // 보물 상자 (파워업 버프)
+      altars: [],      // 보스 소환 제단
+      buildings: [],   // 플레이어가 지은 방어벽 & 포탑
+      enemies: [],     // 몬스터 및 보스
+      projectiles: [], // 투사체
+      particles: [],   // 파티클 이펙트
+      texts: [],       // 플로팅 데미지 & 획득 텍스트
+      decorations: []  // 배경 잔디/꽃 장식
+    };
+
+    // 입력 상태
+    const keys = {};
+    const mouse = { x: 0, y: 0, worldX: 0, worldY: 0, down: false };
+
+    // ==========================================
+    // 4. 유틸리티 & UI 헬퍼 함수
+    // ==========================================
+    function showToast(msg, colorClass = 'text-amber-300') {
+      const container = document.getElementById('toastContainer');
+      const el = document.createElement('div');
+      el.className = `glass-panel px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold ${colorClass} transition-all duration-300 transform translate-x-0 opacity-100`;
+      el.textContent = msg;
+      container.appendChild(el);
+      setTimeout(() => {
+        el.style.opacity = '0';
+        el.style.transform = 'translateX(20px)';
+        setTimeout(() => el.remove(), 300);
+      }, 2400);
+    }
+
+    function canAfford(cost) {
+      if (!cost) return false;
+      return state.resources.stone >= (cost.stone || 0) &&
+             state.resources.iron >= (cost.iron || 0) &&
+             state.resources.gold >= (cost.gold || 0) &&
+             state.resources.crystal >= (cost.crystal || 0);
+    }
+
+    function spendResources(cost) {
+      state.resources.stone -= (cost.stone || 0);
+      state.resources.iron -= (cost.iron || 0);
+      state.resources.gold -= (cost.gold || 0);
+      state.resources.crystal -= (cost.crystal || 0);
+      updateHUD();
+    }
+
+    function formatCost(cost) {
+      if (!cost) return 'MAX';
+      const parts = [];
+      if (cost.stone) parts.push(`🪨${cost.stone}`);
+      if (cost.iron) parts.push(`⛓️${cost.iron}`);
+      if (cost.gold) parts.push(`🪙${cost.gold}`);
+      if (cost.crystal) parts.push(`💎${cost.crystal}`);
+      return parts.join(' ');
+    }
+
+    function addFloatingText(x, y, text, color = '#ffffff', size = 15) {
+      state.texts.push({ x, y, text, color, size, life: 1.0, vy: -38 });
+    }
+
+    function spawnParticles(x, y, color, count = 8, speed = 130) {
+      for (let i = 0; i < count; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const spd = (0.3 + Math.random() * 0.7) * speed;
+        state.particles.push({
+          x, y,
+          vx: Math.cos(ang) * spd,
+          vy: Math.sin(ang) * spd,
+          color,
+          size: 3 + Math.random() * 4,
+          life: 0.4 + Math.random() * 0.35,
+          maxLife: 0.75
+        });
+      }
+    }
+
+    function dist(x1, y1, x2, y2) {
+      return Math.hypot(x2 - x1, y2 - y1);
+    }
+
+    // ==========================================
+    // 5. 오픈월드 맵 생성 (초기화)
+    // ==========================================
+    function initWorld() {
+      state.day = 1;
+      state.isNight = false;
+      state.phaseTimer = DAY_DURATION;
+      state.maxPhaseTime = DAY_DURATION;
+      state.resources = { stone: 50, iron: 30, gold: 0, crystal: 0 };
+      state.kills = 0;
+      state.bossKills = 0;
+
+      state.player = {
+        x: 0, y: 110, radius: 18,
+        hp: 150, maxHp: 150, speed: 240,
+        gatherMult: 1.0, bonusAtk: 0, weaponTier: 1,
+        attackCooldown: 0, angle: 0, swingAnim: 0
+      };
+
+      state.core = {
+        x: 0, y: 0, radius: 44,
+        tier: 1, hp: CORE_TIERS[1].maxHp, maxHp: CORE_TIERS[1].maxHp
+      };
+
+      state.buildMode = null;
+      state.selectedBuilding = null;
+      state.nodes = [];
+      state.chests = [];
+      state.altars = [];
+      state.buildings = [];
+      state.enemies = [];
+      state.projectiles = [];
+      state.particles = [];
+      state.texts = [];
+      state.decorations = [];
+
+      // 바닥 장식 생성
+      for (let i = 0; i < 240; i++) {
+        state.decorations.push({
+          x: (Math.random() - 0.5) * (WORLD_SIZE - 100),
+          y: (Math.random() - 0.5) * (WORLD_SIZE - 100),
+          type: Math.random() > 0.3 ? 'grass' : 'flower',
+          color: Math.random() > 0.5 ? '#fde047' : '#f472b6'
+        });
+      }
+
+      // 4대 자원 노드 생성: 돌(stone), 철(iron), 금(gold), 크리스탈(crystal)
+      const resourceConfigs = [
+        { type: 'stone', count: 80, hp: 65, radius: 25, yield: 8 },
+        { type: 'iron', count: 55, hp: 95, radius: 24, yield: 7 },
+        { type: 'gold', count: 32, hp: 135, radius: 23, yield: 5 },
+        { type: 'crystal', count: 20, hp: 175, radius: 22, yield: 4 }
+      ];
+
+      resourceConfigs.forEach(cfg => {
+        for (let i = 0; i < cfg.count; i++) {
+          let rx, ry, tries = 0;
+          do {
+            rx = (Math.random() - 0.5) * (WORLD_SIZE - 220);
+            ry = (Math.random() - 0.5) * (WORLD_SIZE - 220);
+            tries++;
+          } while (dist(rx, ry, 0, 0) < 200 && tries < 30);
+
+          state.nodes.push({
+            type: cfg.type,
+            x: rx,
+            y: ry,
+            radius: cfg.radius,
+            hp: cfg.hp,
+            maxHp: cfg.hp,
+            yield: cfg.yield,
+            respawnTimer: 0,
+            hitShake: 0
+          });
+        }
+      });
+
+      // 보물 상자 (BoogaBooga 파워업 버프) 14개 배치
+      const chestBuffs = [
+        { type: 'atk', label: '⚔️ 공격력 +12', apply: p => p.bonusAtk += 12 },
+        { type: 'speed', label: '👟 이동속도 +25', apply: p => p.speed += 25 },
+        { type: 'gather', label: '⛏️ 채굴량 +25%', apply: p => p.gatherMult = +(p.gatherMult + 0.25).toFixed(2) },
+        { type: 'hp', label: '❤️ 최대 체력 +40 & 회복', apply: p => { p.maxHp += 40; p.hp = p.maxHp; } },
+        { type: 'loot', label: '💎 보물 광물 다량 획득!', apply: () => {
+          state.resources.stone += 35; state.resources.iron += 30;
+          state.resources.gold += 15; state.resources.crystal += 10;
+        }}
+      ];
+
+      for (let i = 0; i < 14; i++) {
+        const ang = (i / 14) * Math.PI * 2 + Math.random() * 0.3;
+        const d = 380 + Math.random() * 1050;
+        const buff = chestBuffs[i % chestBuffs.length];
+        state.chests.push({
+          x: Math.cos(ang) * d,
+          y: Math.sin(ang) * d,
+          radius: 18,
+          opened: false,
+          buff
+        });
+      }
+
+      // BoogaBooga 보스 소환 제단 3곳 배치
+      const altarPositions = [
+        { x: 0, y: -1150, name: 'BoogaBooga 고대 숲의 가디언 제단' },
+        { x: 1180, y: 420, name: 'BoogaBooga 화산 철갑 골렘 제단' },
+        { x: -1180, y: 420, name: 'BoogaBooga 크리스탈 군주 제단' }
+      ];
+      altarPositions.forEach((pos, idx) => {
+        state.altars.push({
+          id: idx,
+          x: pos.x,
+          y: pos.y,
+          radius: 36,
+          name: pos.name,
+          cooldown: 0
+        });
+      });
+
+      // 낮 필드 몬스터 소수 스폰
+      for (let i = 0; i < 8; i++) {
+        spawnFieldMonster();
+      }
+
+      closeInspect();
+      setBuildMode(null);
+      updateHUD();
+    }
+
+    function spawnFieldMonster() {
+      const ang = Math.random() * Math.PI * 2;
+      const d = 480 + Math.random() * 950;
+      const scale = 1 + (state.day - 1) * 0.22;
+      state.enemies.push({
+        type: 'goblin',
+        isNightWave: false,
+        x: Math.cos(ang) * d,
+        y: Math.sin(ang) * d,
+        radius: 16,
+        hp: Math.round(55 * scale),
+        maxHp: Math.round(55 * scale),
+        speed: 105,
+        dmg: Math.round(10 * scale),
+        atkCooldown: 0,
+        slowTimer: 0,
+        slowFactor: 1,
+        reward: { stone: 6, iron: 4, gold: 1, crystal: 0 }
+      });
+    }
+
+    function spawnBoss(x, y, level = 1) {
+      const mult = level * (1 + (state.day - 1) * 0.25);
+      state.enemies.push({
+        type: 'boss',
+        isNightWave: true,
+        x, y,
+        radius: 38,
+        hp: Math.round(950 * mult),
+        maxHp: Math.round(950 * mult),
+        speed: 78,
+        dmg: Math.round(35 * mult),
+        atkCooldown: 0,
+        slowTimer: 0,
+        slowFactor: 1,
+        reward: { stone: 60, iron: 60, gold: 35, crystal: 25 }
+      });
+      sfx.playWaveAlarm();
+      showToast('👹 BoogaBooga 거대 가디언 보스가 출현했습니다!', 'text-purple-300');
+    }
+
+    // ==========================================
+    // 6. 밤 웨이브 스폰 로직
+    // ==========================================
+    function startNightWave() {
+      state.isNight = true;
+      state.phaseTimer = NIGHT_DURATION;
+      state.maxPhaseTime = NIGHT_DURATION;
+      sfx.playWaveAlarm();
+
+      const banner = document.getElementById('waveBanner');
+      document.getElementById('waveBannerTitle').textContent = `⚠️ NIGHT WAVE ${state.day} 시작!`;
+      document.getElementById('waveBannerSub').textContent = state.day % 3 === 0
+        ? '경고: 웨이브 보스가 무리를 이끌고 본진으로 진격합니다!'
+        : '사방에서 몰려오는 몬스터들로부터 집을 방어하세요!';
+      banner.classList.remove('hidden');
+      setTimeout(() => banner.classList.add('hidden'), 4200);
+
+      const baseCount = 7 + state.day * 4;
+      const scale = 1 + (state.day - 1) * 0.28;
+
+      for (let i = 0; i < baseCount; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const spawnDist = 720 + Math.random() * 350;
+        const isBrute = i % 4 === 0 && state.day >= 2;
+
+        state.enemies.push({
+          type: isBrute ? 'brute' : 'raider',
+          isNightWave: true,
+          x: Math.cos(ang) * spawnDist,
+          y: Math.sin(ang) * spawnDist,
+          radius: isBrute ? 23 : 16,
+          hp: Math.round((isBrute ? 150 : 65) * scale),
+          maxHp: Math.round((isBrute ? 150 : 65) * scale),
+          speed: isBrute ? 72 : 112,
+          dmg: Math.round((isBrute ? 22 : 11) * scale),
+          atkCooldown: 0,
+          slowTimer: 0,
+          slowFactor: 1,
+          reward: isBrute
+            ? { stone: 12, iron: 12, gold: 6, crystal: 2 }
+            : { stone: 6, iron: 4, gold: 2, crystal: 1 }
+        });
+      }
+
+      if (state.day % 3 === 0) {
+        const ang = Math.random() * Math.PI * 2;
+        spawnBoss(Math.cos(ang) * 850, Math.sin(ang) * 850, Math.ceil(state.day / 3));
+      }
+    }
+
+    function startNewDay() {
+      state.day += 1;
+      state.isNight = false;
+      state.phaseTimer = DAY_DURATION;
+      state.maxPhaseTime = DAY_DURATION;
+
+      state.player.hp = Math.min(state.player.maxHp, state.player.hp + 40);
+      showToast(`☀️ DAY ${state.day} 아침이 밝았습니다! 체력 +40 회복`, 'text-amber-300');
+
+      const fieldMonsters = state.enemies.filter(e => !e.isNightWave).length;
+      for (let i = fieldMonsters; i < 8; i++) {
+        spawnFieldMonster();
+      }
+    }
+
+    // ==========================================
+    // 7. 건설, 업그레이드 및 수리 시스템
+    // ==========================================
+    function setBuildMode(type) {
+      state.buildMode = type;
+      document.querySelectorAll('.build-btn').forEach(btn => {
+        if (btn.dataset.build === type) {
+          btn.classList.add('btn-selected');
+        } else {
+          btn.classList.remove('btn-selected');
+        }
+      });
+      if (type) closeInspect();
+    }
+
+    function snapToGrid(wx, wy) {
+      const gx = Math.round(wx / GRID_SIZE) * GRID_SIZE;
+      const gy = Math.round(wy / GRID_SIZE) * GRID_SIZE;
+      return { x: gx, y: gy };
+    }
+
+    function isGridOccupied(gx, gy) {
+      if (dist(gx, gy, state.core.x, state.core.y) < state.core.radius + 26) return true;
+      for (const b of state.buildings) {
+        if (Math.abs(b.x - gx) < GRID_SIZE * 0.8 && Math.abs(b.y - gy) < GRID_SIZE * 0.8) {
+          return true;
+        }
+      }
+      for (const n of state.nodes) {
+        if (n.hp > 0 && dist(gx, gy, n.x, n.y) < n.radius + 18) return true;
+      }
+      return false;
+    }
+
+    function placeBuilding(gx, gy) {
+      const type = state.buildMode;
+      if (!type) return;
+      const def = BUILDING_DEFS[type];
+      if (!canAfford(def.cost)) {
+        showToast('자원이 부족합니다!', 'text-rose-400');
+        return;
+      }
+      if (isGridOccupied(gx, gy)) {
+        showToast('해당 위치에는 건설할 수 없습니다.', 'text-rose-400');
+        return;
+      }
+
+      spendResources(def.cost);
+      const t1 = def.tiers[1];
+      state.buildings.push({
+        type,
+        x: gx,
+        y: gy,
+        tier: 1,
+        hp: t1.maxHp,
+        maxHp: t1.maxHp,
+        cooldown: 0,
+        angle: 0
+      });
+
+      sfx.playBuild();
+      spawnParticles(gx, gy, '#fde047', 10, 90);
+      addFloatingText(gx, gy - 20, `${def.name} 건설!`, '#fde047', 14);
+    }
+
+    function inspectTarget(target) {
+      state.selectedBuilding = target;
+      const panel = document.getElementById('inspectPanel');
+      panel.classList.remove('hidden');
+      refreshInspectPanel();
+    }
+
+    function closeInspect() {
+      state.selectedBuilding = null;
+      document.getElementById('inspectPanel').classList.add('hidden');
+    }
+
+    function refreshInspectPanel() {
+      const target = state.selectedBuilding;
+      if (!target) return;
+
+      const titleEl = document.getElementById('inspectTitle');
+      const tierEl = document.getElementById('inspectTier');
+      const hpEl = document.getElementById('inspectHp');
+      const extraEl = document.getElementById('inspectExtraStats');
+      const repairBtn = document.getElementById('repairBuildingBtn');
+      const repairCostEl = document.getElementById('repairCostText');
+      const upgBtn = document.getElementById('upgradeBuildingBtn');
+      const upgCostEl = document.getElementById('upgradeCostText');
+      const sellBtn = document.getElementById('sellBuildingBtn');
+
+      if (target === 'core') {
+        const c = state.core;
+        const tData = CORE_TIERS[c.tier];
+        titleEl.textContent = tData.name;
+        tierEl.textContent = `본진 등급: Tier ${c.tier} / 3`;
+        hpEl.textContent = `${Math.ceil(c.hp)} / ${c.maxHp}`;
+        extraEl.innerHTML = `<div class="flex justify-between"><span>방어력(피해감소):</span><span class="text-sky-300 font-bold">${tData.armor}</span></div>`;
+
+        const missingHp = c.maxHp - c.hp;
+        const repStone = Math.max(5, Math.ceil(missingHp / 25));
+        repairBtn.disabled = missingHp <= 0;
+        repairBtn.style.opacity = missingHp <= 0 ? '0.45' : '1';
+        repairCostEl.textContent = missingHp <= 0 ? '완벽함' : `🪨 ${repStone}`;
+
+        upgBtn.disabled = !tData.upgradeCost;
+        upgBtn.style.opacity = !tData.upgradeCost ? '0.45' : '1';
+        upgCostEl.textContent = formatCost(tData.upgradeCost);
+        sellBtn.classList.add('hidden');
+      } else {
+        const def = BUILDING_DEFS[target.type];
+        const tData = def.tiers[target.tier];
+        titleEl.textContent = tData.label;
+        tierEl.textContent = `등급: Tier ${target.tier} / 3`;
+        hpEl.textContent = `${Math.ceil(target.hp)} / ${target.maxHp}`;
+
+        if (target.type === 'wall') {
+          extraEl.innerHTML = `<div class="text-gray-400">적의 진격을 가로막는 견고한 방벽</div>`;
+        } else {
+          extraEl.innerHTML = `
+            <div class="flex justify-between"><span>공격력:</span><span class="text-rose-300 font-bold">${tData.dmg}</span></div>
+            <div class="flex justify-between"><span>사거리:</span><span class="text-amber-300 font-bold">${tData.range}</span></div>
+          `;
+        }
+
+        const missingHp = target.maxHp - target.hp;
+        const repStone = Math.max(3, Math.ceil(missingHp / 30));
+        repairBtn.disabled = missingHp <= 0;
+        repairBtn.style.opacity = missingHp <= 0 ? '0.45' : '1';
+        repairCostEl.textContent = missingHp <= 0 ? '완벽함' : `🪨 ${repStone}`;
+
+        upgBtn.disabled = !tData.nextCost;
+        upgBtn.style.opacity = !tData.nextCost ? '0.45' : '1';
+        upgCostEl.textContent = formatCost(tData.nextCost);
+        sellBtn.classList.remove('hidden');
+      }
+    }
+
+    // 수리 버튼 이벤트
+    document.getElementById('repairBuildingBtn').addEventListener('click', () => {
+      const target = state.selectedBuilding;
+      if (!target) return;
+      if (target === 'core') {
+        const missing = state.core.maxHp - state.core.hp;
+        if (missing <= 0) return;
+        const cost = { stone: Math.max(5, Math.ceil(missing / 25)) };
+        if (!canAfford(cost)) return showToast('수리에 필요한 돌이 부족합니다!', 'text-rose-400');
+        spendResources(cost);
+        state.core.hp = state.core.maxHp;
+        sfx.playBuild();
+        addFloatingText(0, -40, '본진 수리 완료!', '#34d399', 16);
+      } else {
+        const missing = target.maxHp - target.hp;
+        if (missing <= 0) return;
+        const cost = { stone: Math.max(3, Math.ceil(missing / 30)) };
+        if (!canAfford(cost)) return showToast('수리에 필요한 돌이 부족합니다!', 'text-rose-400');
+        spendResources(cost);
+        target.hp = target.maxHp;
+        sfx.playBuild();
+        addFloatingText(target.x, target.y - 20, '수리 완료!', '#34d399', 14);
+      }
+      refreshInspectPanel();
+      updateHUD();
+    });
+
+    // 강화 버튼 이벤트
+    document.getElementById('upgradeBuildingBtn').addEventListener('click', () => {
+      const target = state.selectedBuilding;
+      if (!target) return;
+      if (target === 'core') {
+        const c = state.core;
+        const tData = CORE_TIERS[c.tier];
+        if (!tData.upgradeCost) return;
+        if (!canAfford(tData.upgradeCost)) return showToast('본진 강화 자원이 부족합니다!', 'text-rose-400');
+        spendResources(tData.upgradeCost);
+        c.tier += 1;
+        const nextData = CORE_TIERS[c.tier];
+        c.maxHp = nextData.maxHp;
+        c.hp = nextData.maxHp;
+        sfx.playUpgrade();
+        spawnParticles(0, 0, '#34d399', 24, 160);
+        showToast(`🏰 본진이 ${nextData.name}(으)로 승급했습니다!`, 'text-emerald-300');
+      } else {
+        const def = BUILDING_DEFS[target.type];
+        const tData = def.tiers[target.tier];
+        if (!tData.nextCost) return;
+        if (!canAfford(tData.nextCost)) return showToast('강화 자원이 부족합니다!', 'text-rose-400');
+        spendResources(tData.nextCost);
+        target.tier += 1;
+        const nextData = def.tiers[target.tier];
+        target.maxHp = nextData.maxHp;
+        target.hp = nextData.maxHp;
+        sfx.playUpgrade();
+        spawnParticles(target.x, target.y, '#facc15', 16, 120);
+        addFloatingText(target.x, target.y - 25, `⬆️ ${nextData.label}!`, '#facc15', 15);
+      }
+      refreshInspectPanel();
+      updateHUD();
+    });
+
+    // 철거 버튼 이벤트
+    document.getElementById('sellBuildingBtn').addEventListener('click', () => {
+      const target = state.selectedBuilding;
+      if (!target || target === 'core') return;
+      const def = BUILDING_DEFS[target.type];
+      state.resources.stone += Math.floor((def.cost.stone || 0) * 0.5);
+      state.resources.iron += Math.floor((def.cost.iron || 0) * 0.5);
+      state.resources.gold += Math.floor((def.cost.gold || 0) * 0.5);
+      state.resources.crystal += Math.floor((def.cost.crystal || 0) * 0.5);
+      state.buildings = state.buildings.filter(b => b !== target);
+      sfx.playMine();
+      closeInspect();
+      updateHUD();
+      showToast('건물을 철거하고 자원 일부를 회수했습니다.', 'text-gray-300');
+    });
+
+    // 무기 업그레이드 함수
+    function upgradeWeapon() {
+      const p = state.player;
+      const cur = WEAPON_TIERS[p.weaponTier];
+      if (!cur.cost) return showToast('무기가 이미 최고 등급입니다!', 'text-amber-300');
+      if (!canAfford(cur.cost)) return showToast('무기 강화 자원이 부족합니다!', 'text-rose-400');
+
+      spendResources(cur.cost);
+      p.weaponTier += 1;
+      const next = WEAPON_TIERS[p.weaponTier];
+      sfx.playUpgrade();
+      spawnParticles(p.x, p.y, next.color, 20, 140);
+      showToast(`⚔️ 무기 강화 성공: ${next.name}!`, 'text-sky-300');
+      updateHUD();
+    }
+
+    // ==========================================
+    // 8. 플레이어 채굴 및 전투 액션
+    // ==========================================
+    function handlePlayerAction() {
+      const p = state.player;
+      if (p.attackCooldown > 0) return;
+
+      const wData = WEAPON_TIERS[p.weaponTier];
+      p.attackCooldown = wData.fireRate;
+      p.swingAnim = 1.0;
+
+      const reach = 75;
+
+      // 보물 상자 열기
+      for (const chest of state.chests) {
+        if (!chest.opened && dist(p.x, p.y, chest.x, chest.y) < reach) {
+          chest.opened = true;
+          chest.buff.apply(p);
+          sfx.playChest();
+          spawnParticles(chest.x, chest.y, '#facc15', 18, 140);
+          addFloatingText(chest.x, chest.y - 25, chest.buff.label, '#fde047', 16);
+          showToast(`🎁 보물 상자 획득: ${chest.buff.label}`, 'text-yellow-300');
+          updateHUD();
+          return;
+        }
+      }
+
+      // 보스 소환 제단 활성화
+      for (const altar of state.altars) {
+        if (dist(p.x, p.y, altar.x, altar.y) < reach + 15) {
+          if (altar.cooldown > 0) {
+            showToast(`제단 재충전 중... (${Math.ceil(altar.cooldown)}초)`, 'text-purple-300');
+            return;
+          }
+          altar.cooldown = 45;
+          spawnBoss(altar.x, altar.y - 90, 1 + state.bossKills * 0.5);
+          return;
+        }
+      }
+
+      // 4대 광물 채굴 (돌, 철, 금, 크리스탈)
+      const totalDmg = wData.dmg + p.bonusAtk;
+      const resNames = { stone: '돌', iron: '철', gold: '금', crystal: '크리스탈' };
+      const resColors = { stone: '#cbd5e1', iron: '#38bdf8', gold: '#facc15', crystal: '#e879f9' };
+      const resIcons = { stone: '🪨', iron: '⛓️', gold: '🪙', crystal: '💎' };
+
+      for (const node of state.nodes) {
+        if (node.hp <= 0) continue;
+        const d = dist(p.x, p.y, node.x, node.y);
+        if (d < reach + node.radius) {
+          const angToNode = Math.atan2(node.y - p.y, node.x - p.x);
+          const angleDiff = Math.abs(Math.atan2(Math.sin(angToNode - p.angle), Math.cos(angToNode - p.angle)));
+          if (angleDiff < 1.15 || d < 48) {
+            node.hp -= totalDmg;
+            node.hitShake = 0.15;
+
+            const gain = Math.max(1, Math.round((node.yield * 0.45) * p.gatherMult));
+            state.resources[node.type] += gain;
+
+            if (node.type === 'crystal') sfx.playCrystalMine();
+            else sfx.playMine();
+
+            spawnParticles(node.x, node.y, resColors[node.type], 6, 90);
+            addFloatingText(node.x, node.y - 18, `+${gain} ${resIcons[node.type]} ${resNames[node.type]}`, resColors[node.type], 14);
+
+            if (node.hp <= 0) {
+              const bonus = Math.round(node.yield * p.gatherMult);
+              state.resources[node.type] += bonus;
+              node.respawnTimer = 28;
+              addFloatingText(node.x, node.y - 34, `${resNames[node.type]} 채굴 완료! +${bonus}`, '#34d399', 15);
+            }
+            updateHUD();
+          }
+        }
+      }
+
+      // 원거리 에너지 투사체 발사
+      sfx.playShoot();
+      state.projectiles.push({
+        fromPlayer: true,
+        x: p.x + Math.cos(p.angle) * 20,
+        y: p.y + Math.sin(p.angle) * 20,
+        vx: Math.cos(p.angle) * wData.speed,
+        vy: Math.sin(p.angle) * wData.speed,
+        dmg: totalDmg,
+        radius: 6,
+        color: wData.color,
+        splash: 0,
+        slow: 0,
+        life: 0.85
+      });
+    }
+
+    // ==========================================
+    // 9. 메인 게임 로직 업데이트 (Update Loop)
+    // ==========================================
+    function update(dt) {
+      if (!gameRunning) return;
+
+      // 1) 낮/밤 타이머 진행
+      state.phaseTimer -= dt;
+      if (state.phaseTimer <= 0) {
+        if (!state.isNight) {
+          startNightWave();
+        } else {
+          startNewDay();
+        }
+      }
+
+      // 2) 플레이어 이동 & 경계 처리
+      const p = state.player;
+      let mx = 0, my = 0;
+      if (keys['KeyW'] || keys['ArrowUp']) my -= 1;
+      if (keys['KeyS'] || keys['ArrowDown']) my += 1;
+      if (keys['KeyA'] || keys['ArrowLeft']) mx -= 1;
+      if (keys['KeyD'] || keys['ArrowRight']) mx += 1;
+
+      if (mx !== 0 || my !== 0) {
+        const len = Math.hypot(mx, my);
+        p.x += (mx / len) * p.speed * dt;
+        p.y += (my / len) * p.speed * dt;
+        p.x = Math.max(-HALF_WORLD + 30, Math.min(HALF_WORLD - 30, p.x));
+        p.y = Math.max(-HALF_WORLD + 30, Math.min(HALF_WORLD - 30, p.y));
+      }
+
+      mouse.worldX = p.x + (mouse.x - canvas.width / 2);
+      mouse.worldY = p.y + (mouse.y - canvas.height / 2);
+      p.angle = Math.atan2(mouse.worldY - p.y, mouse.worldX - p.x);
+
+      if (state.buildMode) {
+        const snapped = snapToGrid(mouse.worldX, mouse.worldY);
+        state.hoverGrid.x = snapped.x;
+        state.hoverGrid.y = snapped.y;
+        state.hoverGrid.valid = !isGridOccupied(snapped.x, snapped.y) && canAfford(BUILDING_DEFS[state.buildMode].cost);
+      }
+
+      if (p.attackCooldown > 0) p.attackCooldown -= dt;
+      if (p.swingAnim > 0) p.swingAnim = Math.max(0, p.swingAnim - dt * 5);
+
+      if (mouse.down && !state.buildMode) {
+        handlePlayerAction();
+      }
+
+      // 3) 자원 노드 재생성 및 흔들림 감쇠
+      for (const n of state.nodes) {
+        if (n.hitShake > 0) n.hitShake = Math.max(0, n.hitShake - dt);
+        if (n.hp <= 0 && n.respawnTimer > 0) {
+          n.respawnTimer -= dt;
+          if (n.respawnTimer <= 0) {
+            n.hp = n.maxHp;
+          }
+        }
+      }
+
+      for (const a of state.altars) {
+        if (a.cooldown > 0) a.cooldown = Math.max(0, a.cooldown - dt);
+      }
+
+      // 4) 자동 포탑 AI & 사격
+      for (const b of state.buildings) {
+        if (b.type === 'wall') continue;
+        const def = BUILDING_DEFS[b.type];
+        const tData = def.tiers[b.tier];
+
+        if (b.cooldown > 0) {
+          b.cooldown -= dt;
+          continue;
+        }
+
+        let nearest = null;
+        let minDist = tData.range;
+        for (const e of state.enemies) {
+          const d = dist(b.x, b.y, e.x, e.y);
+          if (d <= minDist) {
+            minDist = d;
+            nearest = e;
+          }
+        }
+
+        if (nearest) {
+          b.angle = Math.atan2(nearest.y - b.y, nearest.x - b.x);
+          b.cooldown = tData.fireRate;
+
+          if (b.type === 'mg') sfx.playShoot();
+          else if (b.type === 'cannon') sfx.playCannon();
+          else if (b.type === 'frost') sfx.playFrost();
+
+          state.projectiles.push({
+            fromPlayer: false,
+            x: b.x + Math.cos(b.angle) * 18,
+            y: b.y + Math.sin(b.angle) * 18,
+            vx: Math.cos(b.angle) * (b.type === 'cannon' ? 460 : 680),
+            vy: Math.sin(b.angle) * (b.type === 'cannon' ? 460 : 680),
+            dmg: tData.dmg,
+            radius: b.type === 'cannon' ? 8 : 5,
+            color: b.type === 'frost' ? '#38bdf8' : (b.type === 'cannon' ? '#fb923c' : '#facc15'),
+            splash: tData.splash || 0,
+            slow: tData.slow || 0,
+            life: 1.1
+          });
+        }
+      }
+
+      // 5) 투사체 이동 및 충돌 처리
+      for (let i = state.projectiles.length - 1; i >= 0; i--) {
+        const proj = state.projectiles[i];
+        proj.x += proj.vx * dt;
+        proj.y += proj.vy * dt;
+        proj.life -= dt;
+
+        let hit = false;
+        for (let j = state.enemies.length - 1; j >= 0; j--) {
+          const e = state.enemies[j];
+          if (dist(proj.x, proj.y, e.x, e.y) < proj.radius + e.radius) {
+            hit = true;
+            if (proj.splash > 0) {
+              spawnParticles(proj.x, proj.y, '#fb923c', 14, 150);
+              for (const subE of state.enemies) {
+                if (dist(proj.x, proj.y, subE.x, subE.y) <= proj.splash + subE.radius) {
+                  damageEnemy(subE, proj.dmg);
+                }
+              }
+            } else {
+              damageEnemy(e, proj.dmg);
+              if (proj.slow > 0) {
+                e.slowTimer = 2.4;
+                e.slowFactor = 1 - proj.slow;
+              }
+            }
+            break;
+          }
+        }
+
+        if (hit || proj.life <= 0) {
+          state.projectiles.splice(i, 1);
+        }
+      }
+
+      // 6) 적 AI 이동 및 건물/본진/플레이어 공격
+      for (let i = state.enemies.length - 1; i >= 0; i--) {
+        const e = state.enemies[i];
+        if (e.hp <= 0) {
+          handleEnemyDeath(e);
+          state.enemies.splice(i, 1);
+          continue;
+        }
+
+        if (e.atkCooldown > 0) e.atkCooldown -= dt;
+        if (e.slowTimer > 0) {
+          e.slowTimer -= dt;
+          if (e.slowTimer <= 0) e.slowFactor = 1;
+        }
+
+        let targetX = state.core.x;
+        let targetY = state.core.y;
+        let targetObj = 'core';
+
+        const distToPlayer = dist(e.x, e.y, p.x, p.y);
+        if (!e.isNightWave && distToPlayer > 360) {
+          continue;
+        }
+        if (distToPlayer < 170) {
+          targetX = p.x;
+          targetY = p.y;
+          targetObj = 'player';
+        }
+
+        const ang = Math.atan2(targetY - e.y, targetX - e.x);
+        const curSpeed = e.speed * e.slowFactor;
+        const nextX = e.x + Math.cos(ang) * curSpeed * dt;
+        const nextY = e.y + Math.sin(ang) * curSpeed * dt;
+
+        let blockedBuilding = null;
+        for (const b of state.buildings) {
+          if (dist(nextX, nextY, b.x, b.y) < e.radius + 22) {
+            blockedBuilding = b;
+            break;
+          }
+        }
+
+        if (blockedBuilding) {
+          if (e.atkCooldown <= 0) {
+            e.atkCooldown = 1.0;
+            blockedBuilding.hp -= e.dmg;
+            sfx.playHit();
+            spawnParticles(blockedBuilding.x, blockedBuilding.y, '#ef4444', 5, 70);
+            if (blockedBuilding.hp <= 0) {
+              state.buildings = state.buildings.filter(item => item !== blockedBuilding);
+              if (state.selectedBuilding === blockedBuilding) closeInspect();
+              showToast('⚠️ 방어 시설이 파괴되었습니다!', 'text-rose-400');
+            } else if (state.selectedBuilding === blockedBuilding) {
+              refreshInspectPanel();
+            }
+          }
+        } else if (targetObj === 'player' && dist(nextX, nextY, p.x, p.y) < e.radius + p.radius + 4) {
+          if (e.atkCooldown <= 0) {
+            e.atkCooldown = 0.95;
+            p.hp = Math.max(0, p.hp - e.dmg);
+            sfx.playHit();
+            addFloatingText(p.x, p.y - 24, `-${e.dmg}`, '#f43f5e', 15);
+            if (p.hp <= 0) {
+              p.x = 0; p.y = 95;
+              p.hp = Math.round(p.maxHp * 0.6);
+              showToast('💀 쓰러졌습니다! 본진에서 체력 60%로 부활합니다.', 'text-rose-300');
+            }
+          }
+        } else if (dist(nextX, nextY, state.core.x, state.core.y) < e.radius + state.core.radius + 4) {
+          if (e.atkCooldown <= 0) {
+            e.atkCooldown = 1.0;
+            const armor = CORE_TIERS[state.core.tier].armor;
+            const actualDmg = Math.max(2, e.dmg - armor);
+            state.core.hp = Math.max(0, state.core.hp - actualDmg);
+            sfx.playHit();
+            spawnParticles(0, 0, '#f43f5e', 6, 85);
+            addFloatingText(0, -45, `-${actualDmg}`, '#fb7185', 16);
+            if (state.selectedBuilding === 'core') refreshInspectPanel();
+
+            if (state.core.hp <= 0) {
+              triggerGameOver();
+              return;
+            }
+          }
+        } else {
+          e.x = nextX;
+          e.y = nextY;
+        }
+      }
+
+      // 7) 파티클 & 플로팅 텍스트 업데이트
+      for (let i = state.particles.length - 1; i >= 0; i--) {
+        const pt = state.particles[i];
+        pt.x += pt.vx * dt;
+        pt.y += pt.vy * dt;
+        pt.life -= dt;
+        if (pt.life <= 0) state.particles.splice(i, 1);
+      }
+
+      for (let i = state.texts.length - 1; i >= 0; i--) {
+        const tx = state.texts[i];
+        tx.y += tx.vy * dt;
+        tx.life -= dt;
+        if (tx.life <= 0) state.texts.splice(i, 1);
+      }
+
+      updateHUD();
+    }
+
+    function damageEnemy(enemy, dmg) {
+      enemy.hp -= dmg;
+      spawnParticles(enemy.x, enemy.y, '#fca5a5', 4, 80);
+      addFloatingText(enemy.x, enemy.y - 16, `-${dmg}`, '#ffffff', 13);
+    }
+
+    function handleEnemyDeath(enemy) {
+      state.kills += 1;
+      const r = enemy.reward;
+      state.resources.stone += r.stone || 0;
+      state.resources.iron += r.iron || 0;
+      state.resources.gold += r.gold || 0;
+      state.resources.crystal += r.crystal || 0;
+
+      spawnParticles(enemy.x, enemy.y, enemy.type === 'boss' ? '#c084fc' : '#f87171', enemy.type === 'boss' ? 30 : 12, 150);
+
+      if (enemy.type === 'boss') {
+        state.bossKills += 1;
+        state.player.bonusAtk += 15;
+        state.player.maxHp += 30;
+        state.player.hp = state.player.maxHp;
+        showToast('🏆 BoogaBooga 보스 처치 성공! 영구 공격력 +15, 최대 체력 +30 & 대량 광물 획득!', 'text-purple-300');
+      }
+    }
+
+    function triggerGameOver() {
+      gameRunning = false;
+      document.getElementById('finalDays').textContent = `${state.day} 일차`;
+      document.getElementById('finalKills').textContent = `${state.kills} 마리`;
+      document.getElementById('finalBosses').textContent = `${state.bossKills} 마리`;
+      document.getElementById('finalCoreTier').textContent = CORE_TIERS[state.core.tier].name;
+      document.getElementById('gameOverModal').classList.remove('hidden');
+    }
+
+    // ==========================================
+    // 10. 2.5D 캔버스 렌더링 (Render Loop)
+    // ==========================================
+    function render() {
+      const w = canvas.width;
+      const h = canvas.height;
+      const camX = state.player.x - w / 2;
+      const camY = state.player.y - h / 2;
+
+      ctx.fillStyle = state.isNight ? '#111a18' : '#254229';
+      ctx.fillRect(0, 0, w, h);
+
+      ctx.save();
+      ctx.translate(-camX, -camY);
+
+      const startGridX = Math.floor(camX / 96) * 96;
+      const startGridY = Math.floor(camY / 96) * 96;
+      ctx.strokeStyle = state.isNight ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.05)';
+      ctx.lineWidth = 1;
+      for (let gx = startGridX; gx < camX + w + 96; gx += 96) {
+        ctx.beginPath(); ctx.moveTo(gx, camY); ctx.lineTo(gx, camY + h); ctx.stroke();
+      }
+      for (let gy = startGridY; gy < camY + h + 96; gy += 96) {
+        ctx.beginPath(); ctx.moveTo(camX, gy); ctx.lineTo(camX + w, gy); ctx.stroke();
+      }
+
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 6;
+      ctx.strokeRect(-HALF_WORLD, -HALF_WORLD, WORLD_SIZE, WORLD_SIZE);
+
+      for (const dec of state.decorations) {
+        if (Math.abs(dec.x - state.player.x) > w * 0.6 || Math.abs(dec.y - state.player.y) > h * 0.6) continue;
+        if (dec.type === 'grass') {
+          ctx.fillStyle = state.isNight ? '#1b2e26' : '#2f5434';
+          ctx.fillRect(dec.x, dec.y, 6, 3);
+        } else {
+          ctx.fillStyle = dec.color;
+          ctx.beginPath(); ctx.arc(dec.x, dec.y, 3, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+
+      ctx.beginPath();
+      ctx.arc(0, 0, 150, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(250, 204, 21, 0.18)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // 보스 제단 렌더링
+      for (const a of state.altars) {
+        ctx.save();
+        ctx.translate(a.x, a.y);
+        ctx.beginPath();
+        ctx.arc(0, 0, a.radius, 0, Math.PI * 2);
+        ctx.fillStyle = a.cooldown > 0 ? '#312e81' : '#581c87';
+        ctx.fill();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = a.cooldown > 0 ? '#6366f1' : '#d8b4fe';
+        ctx.stroke();
+
+        ctx.fillStyle = '#f3e8ff';
+        ctx.font = 'bold 12px "Noto Sans KR"';
+        ctx.textAlign = 'center';
+        ctx.fillText('🗿 BoogaBooga 보스 제단', 0, -a.radius - 10);
+        ctx.fillText(a.cooldown > 0 ? `${Math.ceil(a.cooldown)}s` : '[클릭 소환]', 0, 5);
+        ctx.restore();
+      }
+
+      // 보물 상자 렌더링
+      for (const chest of state.chests) {
+        if (chest.opened) continue;
+        ctx.save();
+        ctx.translate(chest.x, chest.y);
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.beginPath(); ctx.ellipse(0, 10, 16, 8, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#b45309';
+        ctx.fillRect(-14, -10, 28, 20);
+        ctx.strokeStyle = '#facc15';
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(-14, -10, 28, 20);
+        ctx.fillStyle = '#fde047';
+        ctx.fillRect(-3, -3, 6, 7);
+        ctx.restore();
+      }
+
+      // 4대 자원 노드 렌더링: 돌(Stone), 철(Iron), 금(Gold), 크리스탈(Crystal)
+      for (const n of state.nodes) {
+        if (n.hp <= 0) continue;
+        if (Math.abs(n.x - state.player.x) > w * 0.65 || Math.abs(n.y - state.player.y) > h * 0.65) continue;
+
+        ctx.save();
+        const shakeX = n.hitShake > 0 ? (Math.random() - 0.5) * 6 : 0;
+        ctx.translate(n.x + shakeX, n.y);
+
+        // 바닥 그림자
+        ctx.fillStyle = 'rgba(0,0,0,0.32)';
+        ctx.beginPath(); ctx.ellipse(0, n.radius * 0.65, n.radius * 0.9, n.radius * 0.45, 0, 0, Math.PI * 2); ctx.fill();
+
+        if (n.type === 'crystal') {
+          // 빛나는 다면체 크리스탈 군집
+          ctx.fillStyle = '#a21caf';
+          ctx.beginPath();
+          ctx.moveTo(0, -n.radius - 4);
+          ctx.lineTo(n.radius * 0.85, 0);
+          ctx.lineTo(0, n.radius * 0.85);
+          ctx.lineTo(-n.radius * 0.85, 0);
+          ctx.closePath();
+          ctx.fill();
+
+          ctx.fillStyle = '#f0abfc';
+          ctx.beginPath();
+          ctx.moveTo(-2, -n.radius + 2);
+          ctx.lineTo(n.radius * 0.45, -2);
+          ctx.lineTo(-2, n.radius * 0.45);
+          ctx.lineTo(-n.radius * 0.5, -2);
+          ctx.closePath();
+          ctx.fill();
+        } else {
+          // 돌, 철, 금 광맥 바위
+          const colors = {
+            stone: ['#475569', '#94a3b8'],
+            iron: ['#0e7490', '#38bdf8'],
+            gold: ['#ca8a04', '#facc15']
+          };
+          const [baseCol, topCol] = colors[n.type];
+          ctx.fillStyle = baseCol;
+          ctx.beginPath(); ctx.arc(0, 0, n.radius, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = topCol;
+          ctx.beginPath(); ctx.arc(-4, -5, n.radius * 0.65, 0, Math.PI * 2); ctx.fill();
+        }
+
+        if (n.hp < n.maxHp) {
+          const bw = 36;
+          ctx.fillStyle = 'rgba(0,0,0,0.6)';
+          ctx.fillRect(-bw / 2, n.radius + 8, bw, 5);
+          ctx.fillStyle = '#4ade80';
+          ctx.fillRect(-bw / 2, n.radius + 8, bw * (n.hp / n.maxHp), 5);
+        }
+        ctx.restore();
+      }
+
+      // 건설 프리뷰 그리기
+      if (state.buildMode) {
+        const hg = state.hoverGrid;
+        ctx.save();
+        ctx.translate(hg.x, hg.y);
+        ctx.fillStyle = hg.valid ? 'rgba(74, 222, 128, 0.35)' : 'rgba(248, 113, 113, 0.35)';
+        ctx.strokeStyle = hg.valid ? '#4ade80' : '#f87171';
+        ctx.lineWidth = 2;
+        ctx.fillRect(-20, -20, 40, 40);
+        ctx.strokeRect(-20, -20, 40, 40);
+
+        if (state.buildMode !== 'wall') {
+          const range = BUILDING_DEFS[state.buildMode].tiers[1].range;
+          ctx.beginPath();
+          ctx.arc(0, 0, range, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(250, 204, 21, 0.3)';
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      // 플레이어 건물 (방어벽 & 포탑) 렌더링
+      for (const b of state.buildings) {
+        const def = BUILDING_DEFS[b.type];
+        const tData = def.tiers[b.tier];
+        ctx.save();
+        ctx.translate(b.x, b.y);
+
+        if (state.selectedBuilding === b) {
+          ctx.strokeStyle = '#facc15';
+          ctx.lineWidth = 3;
+          ctx.strokeRect(-24, -24, 48, 48);
+          if (b.type !== 'wall') {
+            ctx.beginPath();
+            ctx.arc(0, 0, tData.range, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(250, 204, 21, 0.25)';
+            ctx.stroke();
+          }
+        }
+
+        ctx.fillStyle = 'rgba(0,0,0,0.38)';
+        ctx.fillRect(-18, -14, 38, 38);
+
+        if (b.type === 'wall') {
+          ctx.fillStyle = tData.color;
+          ctx.fillRect(-20, -20, 40, 40);
+          ctx.strokeStyle = tData.border;
+          ctx.lineWidth = 3;
+          ctx.strokeRect(-20, -20, 40, 40);
+        } else {
+          ctx.fillStyle = '#334155';
+          ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = tData.color;
+          ctx.lineWidth = 3;
+          ctx.stroke();
+
+          ctx.rotate(b.angle);
+          ctx.fillStyle = tData.color;
+          if (b.type === 'mg') {
+            ctx.fillRect(0, -5, 25, 10);
+          } else if (b.type === 'cannon') {
+            ctx.fillRect(0, -8, 24, 16);
+          } else if (b.type === 'frost') {
+            ctx.beginPath(); ctx.moveTo(24, 0); ctx.lineTo(-8, -11); ctx.lineTo(-8, 11); ctx.closePath(); ctx.fill();
+          }
+          ctx.rotate(-b.angle);
+        }
+
+        if (b.hp < b.maxHp) {
+          ctx.fillStyle = 'rgba(0,0,0,0.65)';
+          ctx.fillRect(-18, 23, 36, 4);
+          ctx.fillStyle = '#34d399';
+          ctx.fillRect(-18, 23, 36 * (b.hp / b.maxHp), 4);
+        }
+        ctx.restore();
+      }
+
+      // 핵심 본진 (House / Core) 렌더링
+      {
+        const c = state.core;
+        const tData = CORE_TIERS[c.tier];
+        ctx.save();
+        ctx.translate(c.x, c.y);
+
+        if (state.selectedBuilding === 'core') {
+          ctx.beginPath(); ctx.arc(0, 0, c.radius + 10, 0, Math.PI * 2);
+          ctx.strokeStyle = '#facc15'; ctx.lineWidth = 3; ctx.stroke();
+        }
+
+        ctx.fillStyle = 'rgba(0,0,0,0.42)';
+        ctx.beginPath(); ctx.ellipse(0, 14, c.radius + 6, c.radius * 0.7, 0, 0, Math.PI * 2); ctx.fill();
+
+        ctx.fillStyle = tData.color;
+        ctx.fillRect(-38, -32, 76, 68);
+        ctx.strokeStyle = '#fef08a';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(-38, -32, 76, 68);
+
+        ctx.fillStyle = tData.roofColor;
+        ctx.beginPath();
+        ctx.moveTo(0, -56);
+        ctx.lineTo(46, -24);
+        ctx.lineTo(-46, -24);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(-12, 10, 24, 26);
+        ctx.fillStyle = '#e879f9';
+        ctx.beginPath(); ctx.arc(0, -6, 10, 0, Math.PI * 2); ctx.fill();
+
+        ctx.restore();
+      }
+
+      // 적 몬스터 & 보스 렌더링
+      for (const e of state.enemies) {
+        if (Math.abs(e.x - state.player.x) > w * 0.65 || Math.abs(e.y - state.player.y) > h * 0.65) continue;
+
+        ctx.save();
+        ctx.translate(e.x, e.y);
+
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.beginPath(); ctx.ellipse(0, e.radius * 0.7, e.radius * 0.9, e.radius * 0.45, 0, 0, Math.PI * 2); ctx.fill();
+
+        ctx.fillStyle = e.type === 'boss' ? '#7e22ce' : (e.type === 'brute' ? '#b91c1c' : '#dc2626');
+        if (e.slowTimer > 0) ctx.fillStyle = '#0284c7';
+
+        ctx.beginPath();
+        ctx.arc(0, 0, e.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.lineWidth = e.type === 'boss' ? 4 : 2;
+        ctx.strokeStyle = e.type === 'boss' ? '#facc15' : '#fca5a5';
+        ctx.stroke();
+
+        ctx.fillStyle = '#fef08a';
+        ctx.fillRect(-7, -5, 4, 4);
+        ctx.fillRect(3, -5, 4, 4);
+
+        const bw = e.type === 'boss' ? 68 : 32;
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(-bw / 2, -e.radius - 12, bw, 5);
+        ctx.fillStyle = e.type === 'boss' ? '#c084fc' : '#f43f5e';
+        ctx.fillRect(-bw / 2, -e.radius - 12, bw * Math.max(0, e.hp / e.maxHp), 5);
+
+        if (e.type === 'boss') {
+          ctx.fillStyle = '#f3e8ff';
+          ctx.font = 'bold 11px "Noto Sans KR"';
+          ctx.textAlign = 'center';
+          ctx.fillText('👑 BOOGABOOGA GUARDIAN', 0, -e.radius - 17);
+        }
+
+        ctx.restore();
+      }
+
+      // 플레이어 캐릭터 렌더링
+      {
+        const p = state.player;
+        const wData = WEAPON_TIERS[p.weaponTier];
+        ctx.save();
+        ctx.translate(p.x, p.y);
+
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.beginPath(); ctx.ellipse(0, 14, 16, 8, 0, 0, Math.PI * 2); ctx.fill();
+
+        ctx.save();
+        ctx.rotate(p.angle + (p.swingAnim > 0 ? Math.sin(p.swingAnim * Math.PI) * 0.7 : 0));
+        ctx.fillStyle = wData.color;
+        ctx.fillRect(10, -4, 22, 8);
+        ctx.restore();
+
+        ctx.fillStyle = '#38bdf8';
+        ctx.beginPath(); ctx.arc(0, 0, p.radius, 0, Math.PI * 2); ctx.fill();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#ffffff';
+        ctx.stroke();
+
+        const eyeX = Math.cos(p.angle) * 6;
+        const eyeY = Math.sin(p.angle) * 6;
+        ctx.fillStyle = '#0f172a';
+        ctx.beginPath(); ctx.arc(eyeX - 3, eyeY - 2, 2.5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(eyeX + 4, eyeY + 2, 2.5, 0, Math.PI * 2); ctx.fill();
+
+        ctx.restore();
+      }
+
+      // 투사체 렌더링
+      for (const proj of state.projectiles) {
+        ctx.fillStyle = proj.color;
+        ctx.beginPath();
+        ctx.arc(proj.x, proj.y, proj.radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // 파티클 렌더링
+      for (const pt of state.particles) {
+        ctx.globalAlpha = Math.max(0, pt.life / pt.maxLife);
+        ctx.fillStyle = pt.color;
+        ctx.fillRect(pt.x - pt.size / 2, pt.y - pt.size / 2, pt.size, pt.size);
+      }
+      ctx.globalAlpha = 1;
+
+      // 플로팅 텍스트 렌더링
+      ctx.textAlign = 'center';
+      for (const tx of state.texts) {
+        ctx.globalAlpha = Math.min(1, tx.life * 1.4);
+        ctx.font = `bold ${tx.size}px "Noto Sans KR"`;
+        ctx.fillStyle = '#000000';
+        ctx.fillText(tx.text, tx.x + 1, tx.y + 1);
+        ctx.fillStyle = tx.color;
+        ctx.fillText(tx.text, tx.x, tx.y);
+      }
+      ctx.globalAlpha = 1;
+
+      ctx.restore();
+
+      if (state.isNight) {
+        const grad = ctx.createRadialGradient(w / 2, h / 2, 160, w / 2, h / 2, Math.max(w, h) * 0.65);
+        grad.addColorStop(0, 'rgba(0,0,0,0)');
+        grad.addColorStop(1, 'rgba(4, 10, 22, 0.62)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
+      }
+
+      renderMinimap();
+    }
+
+    // 미니맵 렌더링
+    function renderMinimap() {
+      const mw = minimapCanvas.width;
+      const mh = minimapCanvas.height;
+      const scale = mw / WORLD_SIZE;
+
+      miniCtx.fillStyle = state.isNight ? '#0b1318' : '#142618';
+      miniCtx.fillRect(0, 0, mw, mh);
+
+      const toMiniX = wx => (wx + HALF_WORLD) * scale;
+      const toMiniY = wy => (wy + HALF_WORLD) * scale;
+
+      miniCtx.fillStyle = '#c084fc';
+      for (const a of state.altars) {
+        miniCtx.fillRect(toMiniX(a.x) - 3, toMiniY(a.y) - 3, 6, 6);
+      }
+
+      miniCtx.fillStyle = '#facc15';
+      for (const c of state.chests) {
+        if (!c.opened) miniCtx.fillRect(toMiniX(c.x) - 1.5, toMiniY(c.y) - 1.5, 3, 3);
+      }
+
+      miniCtx.fillStyle = '#34d399';
+      miniCtx.fillRect(toMiniX(0) - 4, toMiniY(0) - 4, 8, 8);
+
+      miniCtx.fillStyle = '#f43f5e';
+      for (const e of state.enemies) {
+        const sz = e.type === 'boss' ? 5 : 2.5;
+        miniCtx.fillRect(toMiniX(e.x) - sz / 2, toMiniY(e.y) - sz / 2, sz, sz);
+      }
+
+      miniCtx.fillStyle = '#ffffff';
+      miniCtx.beginPath();
+      miniCtx.arc(toMiniX(state.player.x), toMiniY(state.player.y), 3, 0, Math.PI * 2);
+      miniCtx.fill();
+    }
+
+    // ==========================================
+    // 11. HUD UI 갱신
+    // ==========================================
+    function updateHUD() {
+      document.getElementById('dayText').textContent = `DAY ${state.day}`;
+      document.getElementById('phaseIcon').textContent = state.isNight ? '🌙' : '☀️';
+      document.getElementById('phaseLabel').textContent = state.isNight ? '밤 (디펜스 방어!)' : '낮 (파밍/건설)';
+      document.getElementById('timerText').textContent = `${Math.ceil(state.phaseTimer)}s`;
+      document.getElementById('timeBar').style.width = `${Math.max(0, (state.phaseTimer / state.maxPhaseTime) * 100)}%`;
+
+      const badge = document.getElementById('phaseBadge');
+      if (state.isNight) {
+        badge.className = 'px-3 py-1 rounded-xl font-game text-base sm:text-lg bg-rose-500/25 border border-rose-400/50 text-rose-300 flex items-center gap-1.5';
+        document.getElementById('skipDayBtn').classList.add('hidden');
+      } else {
+        badge.className = 'px-3 py-1 rounded-xl font-game text-base sm:text-lg bg-amber-500/20 border border-amber-400/50 text-amber-300 flex items-center gap-1.5';
+        document.getElementById('skipDayBtn').classList.remove('hidden');
+      }
+
+      // 4대 자원 (돌, 철, 금, 크리스탈)
+      document.getElementById('resStone').textContent = state.resources.stone;
+      document.getElementById('resIron').textContent = state.resources.iron;
+      document.getElementById('resGold').textContent = state.resources.gold;
+      document.getElementById('resCrystal').textContent = state.resources.crystal;
+
+      const c = state.core;
+      document.getElementById('coreTierLabel').textContent = `🏠 본진 T${c.tier}`;
+      document.getElementById('coreHpBar').style.width = `${Math.max(0, (c.hp / c.maxHp) * 100)}%`;
+      document.getElementById('coreHpText').textContent = `${Math.ceil(c.hp)} / ${c.maxHp}`;
+
+      const p = state.player;
+      document.getElementById('playerHpBar').style.width = `${Math.max(0, (p.hp / p.maxHp) * 100)}%`;
+      document.getElementById('playerHpText').textContent = `${Math.ceil(p.hp)} / ${p.maxHp}`;
+
+      const cCost = CORE_TIERS[c.tier].upgradeCost;
+      document.getElementById('coreNextCost').textContent = formatCost(cCost);
+
+      const wData = WEAPON_TIERS[p.weaponTier];
+      document.getElementById('weaponNextCost').textContent = formatCost(wData.cost);
+
+      document.getElementById('weaponTierBadge').textContent = `Lv.${p.weaponTier}`;
+      document.getElementById('statAtk').textContent = wData.dmg + p.bonusAtk;
+      document.getElementById('statGather').textContent = `x${p.gatherMult.toFixed(2)}`;
+      document.getElementById('statSpeed').textContent = p.speed;
+      document.getElementById('statKills').textContent = state.kills;
+    }
+
+    // ==========================================
+    // 12. 입력 이벤트 리스너 & 반응형 캔버스
+    // ==========================================
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+
+    window.addEventListener('keydown', e => {
+      keys[e.code] = true;
+      if (!gameRunning) return;
+
+      if (e.key === '1') setBuildMode(state.buildMode === 'wall' ? null : 'wall');
+      else if (e.key === '2') setBuildMode(state.buildMode === 'mg' ? null : 'mg');
+      else if (e.key === '3') setBuildMode(state.buildMode === 'cannon' ? null : 'cannon');
+      else if (e.key === '4') setBuildMode(state.buildMode === 'frost' ? null : 'frost');
+      else if (e.key === '5') { setBuildMode(null); inspectTarget('core'); }
+      else if (e.key === '6') upgradeWeapon();
+      else if (e.key === 'Escape') { setBuildMode(null); closeInspect(); }
+    });
+
+    window.addEventListener('keyup', e => {
+      keys[e.code] = false;
+    });
+
+    canvas.addEventListener('mousemove', e => {
+      mouse.x = e.clientX;
+      mouse.y = e.clientY;
+    });
+
+    canvas.addEventListener('mousedown', e => {
+      if (!gameRunning) return;
+      if (e.button === 2) {
+        setBuildMode(null);
+        closeInspect();
+        return;
+      }
+      if (e.button === 0) {
+        mouse.down = true;
+        const wx = state.player.x + (e.clientX - canvas.width / 2);
+        const wy = state.player.y + (e.clientY - canvas.height / 2);
+
+        if (state.buildMode) {
+          const snapped = snapToGrid(wx, wy);
+          placeBuilding(snapped.x, snapped.y);
+          return;
+        }
+
+        if (dist(wx, wy, 0, 0) <= state.core.radius + 10) {
+          inspectTarget('core');
+          return;
+        }
+
+        for (const b of state.buildings) {
+          if (Math.abs(wx - b.x) <= 22 && Math.abs(wy - b.y) <= 22) {
+            inspectTarget(b);
+            return;
+          }
+        }
+
+        handlePlayerAction();
+      }
+    });
+
+    window.addEventListener('mouseup', () => {
+      mouse.down = false;
+    });
+
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+    document.querySelectorAll('.build-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const type = btn.dataset.build;
+        setBuildMode(state.buildMode === type ? null : type);
+      });
+    });
+
+    document.getElementById('selectCoreBtn').addEventListener('click', () => {
+      setBuildMode(null);
+      inspectTarget('core');
+    });
+
+    document.getElementById('upgradeWeaponBtn').addEventListener('click', upgradeWeapon);
+    document.getElementById('closeInspectBtn').addEventListener('click', closeInspect);
+
+    document.getElementById('skipDayBtn').addEventListener('click', () => {
+      if (!state.isNight && gameRunning) startNightWave();
+    });
+
+    document.getElementById('bossRadarBtn').addEventListener('click', () => {
+      showToast('🗿 BoogaBooga 보스 제단: 북쪽(0, -1150), 동남쪽(1180, 420), 서남쪽(-1180, 420) - 미니맵 보라색 점!', 'text-purple-300');
+    });
+
+    document.getElementById('soundToggleBtn').addEventListener('click', (e) => {
+      sfx.muted = !sfx.muted;
+      e.target.textContent = sfx.muted ? '🔇' : '🔊';
+    });
+
+    document.getElementById('helpToggleBtn').addEventListener('click', () => {
+      document.getElementById('startModal').classList.remove('hidden');
+    });
+
+    document.getElementById('startGameBtn').addEventListener('click', () => {
+      sfx.init();
+      document.getElementById('startModal').classList.add('hidden');
+      if (!gameRunning && state.core.hp > 0 && state.day === 1 && state.kills === 0) {
+        initWorld();
+      }
+      gameRunning = true;
+    });
+
+    document.getElementById('restartBtn').addEventListener('click', () => {
+      document.getElementById('gameOverModal').classList.add('hidden');
+      initWorld();
+      gameRunning = true;
+    });
+
+    function gameLoop(timestamp) {
+      const dt = Math.min(0.05, (timestamp - lastTime) / 1000);
+      lastTime = timestamp;
+
+      update(dt);
+      render();
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    window.onload = function () {
+      resizeCanvas();
+      initWorld();
+      lastTime = performance.now();
+      requestAnimationFrame(gameLoop);
+    };
+  </script>
+</body>
+</html>
